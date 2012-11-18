@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="Author" content="Rafael Castro Couto, rafaelcastrocouto@gmail.com">
+  <title>Espectro 2D</title>
+  <!--script src="shared.js"></script-->
+  <style> 
+    body{
+      margin: 0;
+      font-family: 'Open Sans',arial,sans-serif; 
+    } 
+    .container{
+      display: block;
+      width: 800px;
+    }
+    #title{
+      width: 800px;
+      text-align: center;
+      font-size: 14px;
+    }
+    #spectre{
+      height: 600px;
+      width: 800px;
+      cursor: crosshair;
+      float: left;
+      margin-left: 10px;
+      border: 1px solid black;
+    }
+    span{
+      font-size: 12px;
+      position: absolute;
+    }
+    #n{
+      top: 80px;
+      left: 305px;
+    }
+    #s{
+      top: 630px;
+      left: 305px;
+    }
+    #w{
+      top: 350px;
+      left: 30px;
+    }
+    #e{
+      top: 350px;
+      left: 580px;
+    }
+    #ne{
+      top: 160px;
+      left: 500px;
+    }
+    #se{
+      top: 550px;
+      left: 500px;
+    }
+    #sw{
+      top: 550px;
+      left: 100px;
+    }
+    #nw{
+      top: 160px;
+      left: 100px;
+    }
+    #max{
+      top: 90px;
+      left: 700px;
+    }
+    #mid{
+      top: 355px;
+      left: 700px;
+    }    
+    #min{
+      top: 620px;
+      left: 700px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <input type="file" id="file"></input>
+    <button id="toimg">To PNG image</button>
+    <br>
+    <h1 id="title">Espectro 2D</h1>
+  </div>
+  <div class="container">
+    <canvas id="spectre"></canvas> 
+    <div>
+      <span id="n">N</span>
+      <span id="ne">NE</span>
+      <span id="e">E</span>
+      <span id="se">SE</span>
+      <span id="s">S</span>
+      <span id="sw">SW</span>
+      <span id="w">W</span>
+      <span id="nw">NW</span>
+
+      <span id="max">1</span>
+      <span id="mid">0.5</span>
+      <span id="min">0</span>
+    </div>
+  </div>
+
+<script type="text/javascript">
+var spectre = function(){
+
+  /////////////////dom shortcuts/////////////////
+
+  var create = function(t, props){
+    var el = document.createElement(t);
+    el.on=function(e,f,u){el.addEventListener(e,f,u)};
+    el.off=function(e,f){el.removeEventListener(e,f)};
+    el.css=function(p,v){if(v) el.style[p]=v; else return el.style[p];};
+    if(props){for(i in props){el[i] = props[i];}}
+    return el;
+  };
+
+  var get = { 
+    id: function(i){var el=document.getElementById(i); if(!el) return false;
+      el.on=function(e,f,u){el.addEventListener(e,f,u)};
+      el.off=function(e,f){el.removeEventListener(e,f)};
+      el.css=function(p,v){if(v) el.style[p]=v; else return el.style[p];};
+      return el;},
+    cl: function(c){var els=document.getElementsByClassName(c); if(!els) return false;
+      els.each=function(f){for(var i=0;i<els.length;i++){f(els[i],i)}}; 
+      els.on=function(e,f,u){for(var i=0;i<els.length;i++){els[i].addEventListener(e,f,u)}}
+      els.off=function(e,f){for(var i=0;i<els.length;i++){els[i].removeEventListener(e,f)}}
+      els.css=function(p,v){for(var i=0;i<els.length;i++){
+        if(v) els[i].style[p]=v; else return els[i].style[p];
+      }}
+      return els;},
+      tag: function(t){var els=document.getElementsByTagName(c); if(!els) return false;
+      els.each=function(f){for(var i=0;i<els.length;i++){f(els[i],i)}}; 
+      els.on=function(e,f,u){for(var i=0;i<els.length;i++){els[i].addEventListener(e,f,u)}}
+      els.off=function(e,f){for(var i=0;i<els.length;i++){els[i].removeEventListener(e,f)}}
+      els.css=function(p,v){for(var i=0;i<els.length;i++){
+        if(v) els[i].style[p]=v; else return els[i].style[p];
+      }}
+      return els;}
+  };
+
+  var noselect = function(el){
+    el.onselectstart = function(){return false;};  
+  };
+
+  var runAgain = function(f,t){
+    clearTimeout(f.timeout);  
+    f.timeout = setTimeout(f, t);
+  };
+
+  var clear = function(el){
+    if (el.hasChildNodes()){
+      while (el.childNodes.length > 0 ){
+        el.removeChild( el.firstChild );       
+      } 
+    }
+  };
+
+  /////////////////plot/////////////////
+
+  var plot = function(file){
+    get.id('title').innerText = file.time + ' Espectro 2D';
+    plot_gradient(0, 0, height, [240,240,240]); //grey background
+    grad = generate_gradient();
+    polar(plot_gradient, file.data, radius, 80, color_spectre, (Math.PI/2));
+    draw_grid();
+    paint_bar();
+  };
+
+  var polar = function(f, arr, radius, cut_end, color, rot){  
+    var cut_start = 0;
+    if(!cut_end) cut_end = 0;
+    var x, y, x1, y1, obj, ptr;
+    if(!rot) rot = 0;
+    for (var i=cut_start; i<arr.length - cut_end; i++) {
+      for (var j=0; j<arr[i].length; j++) {
+        var t= -1*j*(360/arr[i].length)*(Math.PI/180) + rot;
+        var r = parseFloat(i*radius);
+
+        var size = parseFloat((i+(2.5*radius))/(2*radius));
+        var c;
+        if(!color) c = [0,0,0];
+        else c = color(arr[i][j]);
+        x=r*Math.cos(t);
+        y=r*Math.sin(t);
+
+        x1=offset+(x);
+        y1=offset-(y);
+        if(i==0 && j==0) spectre.center = [x1,y1];
+        f(y1, x1, size, c);
+      }
+    }
+  };
+
+  /////////////////gradient/////////////////
+  
+  var plot_gradient = function(top, left, size, color){  
+    size = 8 * size;
+    if(!spectre.ctx){
+      spectre.canvas = get.id('spectre');     
+      spectre.ctx = spectre.canvas.getContext('2d');
+      
+      spectre.canvas.height = height;   
+      spectre.canvas.width = width;
+    } 
+    var center = size/2;
+
+    var cx = left-(center),
+        cy = top-(center);
+    var g = spectre.ctx.createRadialGradient(left, top, 1, left, top, size/2);  
+        g.addColorStop(0, 'rgba('+color[0]+','+color[1]+','+color[2]+',1)');  
+        g.addColorStop(0.4, 'rgba('+color[0]+','+color[1]+','+color[2]+',0.4)');  
+        g.addColorStop(1, 'rgba('+color[0]+','+color[1]+','+color[2]+',0)'); 
+    spectre.ctx.fillStyle = g;  
+    spectre.ctx.fillRect(cx, cy,size,size);  
+  };
+
+  var generate_gradient = function(){
+    var grad = [], r = 1, g = 1, b = 1, p = 10000;
+    for(var i = 0; i < 105; i++){
+      if(i >= 1  && i < 15) r -= 0.0357;
+      if(i >= 16 && i < 30) {
+        r -= 0.0143;
+        g -= 0.05;
+      }
+      if(i >= 31 && i < 45) {
+        r -= 0.0071;
+        g -= 0.0071;
+        b -= 0.0357;
+      }
+      if(i >= 46 && i < 60) {
+        r -= 0.0071;
+        g += 0.0286;
+        b -= 0.0286;
+      }
+      if(i >= 61 && i < 75) {
+        r += 0.0286;
+        g += 0.0286;
+        b += 0.0286;
+      }     
+      if(i >= 76 && i < 90) {
+        r += 0.0357;
+        g = 1;
+        b -= 0.0357;
+      }   
+      if(i >= 91) {
+        r = 1;
+        g -= 0.0714;
+        b = 0;
+      }   
+      var c = [Math.round(r*p)/p, Math.round(g*p)/p, Math.round(b*p)/p];
+      grad[i] = c;
+    }
+    return grad;
+  };
+
+  var color_spectre = function(v){
+    var dec = parseFloat(v) / max;
+    var i = Math.round(dec*104);
+    
+    var r = Math.round(grad[i][0]*255);
+    var g = Math.round(grad[i][1]*255);
+    var b = Math.round(grad[i][2]*255);
+
+    return [r,g,b];
+  };
+  /////////////////bar/////////////////
+
+  var paint_bar = function(){
+    var bar = get.id('bar');
+    var i, j = grad.length-1;
+    var h = (height*0.9/grad.length);
+    for(i = 0; i<grad.length; i++){
+      var c =  'rgb('+parseInt(grad[j][0]*255)+','+parseInt(grad[j][1]*255)+','+parseInt(grad[j][2]*255)+')';
+      spectre.ctx.fillStyle = c;  
+      spectre.ctx.fillRect(640.5, 0.5+height*0.05+(i * h), 40, h+1);  
+      j--;
+    }
+    spectre.ctx.strokeStyle = 'black'; 
+    spectre.ctx.strokeRect(640.5, 0.5+height*0.05, 40, (105 * h)); 
+    get.id('max').textContent = max;
+    get.id('mid').textContent = max/2;
+  };
+
+  /////////////////grid/////////////////
+
+  var draw_grid = function(x,y,r){
+    polar(plot_point, new_array(105, 8), (0.5*radius), 0, 0, (Math.PI/8));
+    var s = 7.5;var i = 0;
+    while(i < 7){
+      polar(plot_point, new_array(2,10*i*s), (i*s*radius));
+      i++;
+    } 
+    polar(plot_point, new_array(2,2000), (52*radius));
+  };   
+
+  var plot_point = function(top, left){
+    spectre.ctx.fillStyle = 'black';
+    spectre.ctx.beginPath();
+    spectre.ctx.arc(left,top, 0.5, 0, Math.PI*2, true); 
+    spectre.ctx.closePath();
+    spectre.ctx.fill();
+  };  
+
+  var new_array = function(ii, jj){
+    var arr = [];
+    var i = 0, j = 0;
+    while(i < ii){
+      j = 0;
+      arr.push([]);
+      while(j < jj){
+        arr[i].push(0.01);
+        j++;
+      }
+      i++;
+    }
+    return arr;
+  }; 
+    
+  /////////////////file/////////////////
+
+  var read_file = function(file){
+    var line = file.split('\n');
+    var file = {
+      time: get_date(line[3]),
+      nf: parseInt(get_value(line[4])),
+      inif: parseFloat(get_value(line[5])),
+      fsp: parseFloat(get_value(line[6])),
+      nd: parseInt(get_value(line[8])),
+      dsp: parseFloat(get_value(line[9])),
+      data: get_array(line)
+    }
+    return file;
+  };
+
+  var get_value = function(line){
+    return line.slice(line.indexOf('=') + 1, line.length);
+  };
+
+  var get_date = function(line){
+    var now = line.slice((line.indexOf('=')+2), line.indexOf('('));
+    return now;
+  };
+  
+  var get_array = function(lines){
+    var array = lines.slice(12, lines.length);
+    var i = 0, j = 0;
+    while(i < array.length){
+      j = 0;
+      array[i] = array[i].split(' ');
+      while(j < array[i].length){ 
+        if(parseFloat(array[i][j]) > max) max = parseFloat(array[i][j]);
+        if(array[i][j] == '') array[i].splice(j, 1);
+        j++;
+      }
+      if(array[i].length <= 1) array.splice(i, 1);
+      i++;
+    } 
+    return array; 
+  };
+
+  /////////////////events/////////////////
+
+  var add_events = function (){
+    get.id('file').on('change', change_file);
+    get.id('toimg').on('click', click_toimg);
+  } 
+
+  var change_file = function(event){
+    var reader = new FileReader();
+    reader.onload = function(event) {
+      var file = read_file(event.target.result);
+      plot(file);
+    };
+    reader.onerror = function(event) {
+      console.error("File could not be read! Code " + event.target.error.code);
+    };
+    var file = event.target.files[0];
+    reader.readAsText(file);
+
+    event.stopPropagation();
+    event.preventDefault();    
+
+  };
+
+  var click_toimg = function(){
+    document.location = get.id('spectre').toDataURL("image/png");
+
+  };
+
+
+  /////////////////init/////////////////
+
+  var width = 800, height = 600;
+  var grad; //color gradient spectre array
+  var max = 0; //max freq value
+  var radius = 5;
+  var offset = (height/2);
+
+  var init = function(){
+    add_events();
+  };
+
+  init();
+};
+window.addEventListener('load', spectre);
+</script>
+</body>
+</html>
